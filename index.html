@@ -568,8 +568,89 @@ img, video { -webkit-user-drag:none; user-drag:none; }
     segundos: 10,
 
     // Texto do botão depois de liberado.
-    rotuloLivre: "FALAR COM A KELLIN"
+    rotuloLivre: "FALAR COM A KELLIN",
+
+    // ---------- RASTREAMENTO ----------
+    // Deixe em branco ("") para desligar. Nada quebra se ficar vazio.
+
+    // ID do Pixel da Meta (Facebook/Instagram). Só números.
+    pixel: "",
+
+    // ID do Google Analytics 4. Formato G-XXXXXXXXXX.
+    ga: "",
+
+    // true mostra cada evento no console do navegador, para conferir.
+    depurar: false
   };
+
+  /* ==========================================================
+     RASTREAMENTO — Pixel da Meta e Google Analytics
+     Só carrega se o ID estiver preenchido lá em cima.
+     ========================================================== */
+
+  function carregarPixel(id) {
+    if (!id) return;
+    /* eslint-disable */
+    !function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+    n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;
+    n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;
+    t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}
+    (window, document,'script','https://connect.facebook.net/en_US/fbevents.js');
+    /* eslint-enable */
+    window.fbq("init", id);
+    window.fbq("track", "PageView");
+  }
+
+  function carregarGA(id) {
+    if (!id) return;
+    var s = document.createElement("script");
+    s.async = true;
+    s.src = "https://www.googletagmanager.com/gtag/js?id=" + id;
+    document.head.appendChild(s);
+    window.dataLayer = window.dataLayer || [];
+    window.gtag = function () { window.dataLayer.push(arguments); };
+    window.gtag("js", new Date());
+    window.gtag("config", id);
+  }
+
+  carregarPixel(CONFIG.pixel);
+  carregarGA(CONFIG.ga);
+
+  // De onde a pessoa veio: vai junto em todo evento.
+  var origem = (function () {
+    var q = new URLSearchParams(location.search);
+    return {
+      utm_source:   q.get("utm_source")   || "direto",
+      utm_medium:   q.get("utm_medium")   || "",
+      utm_campaign: q.get("utm_campaign") || "",
+      utm_content:  q.get("utm_content")  || ""
+    };
+  })();
+
+  // Cada evento dispara uma vez só, mesmo se a função for chamada de novo.
+  var jaDisparou = {};
+
+  function rastrear(evento, padraoMeta) {
+    if (jaDisparou[evento]) return;
+    jaDisparou[evento] = true;
+
+    var dados = {
+      utm_source:   origem.utm_source,
+      utm_medium:   origem.utm_medium,
+      utm_campaign: origem.utm_campaign,
+      utm_content:  origem.utm_content
+    };
+
+    if (window.fbq) {
+      // O evento padrão alimenta a otimização da Meta.
+      if (padraoMeta) window.fbq("track", padraoMeta, dados);
+      // O personalizado deixa o funil legível no relatório.
+      window.fbq("trackCustom", evento, dados);
+    }
+    if (window.gtag) window.gtag("event", evento, dados);
+
+    if (CONFIG.depurar) console.log("[rastreio] " + evento, dados);
+  }
 
   var video  = document.getElementById("video");
   var capa   = document.getElementById("capa");
@@ -634,6 +715,7 @@ img, video { -webkit-user-drag:none; user-drag:none; }
 
   /* ---------- o toque que começa tudo ---------- */
   capa.addEventListener("click", function () {
+    rastrear("VideoPlay");
     capa.classList.add("some");
     som.classList.add("ativo");
     video.loop = false;
@@ -715,6 +797,8 @@ img, video { -webkit-user-drag:none; user-drag:none; }
     dica.textContent = "Atendimento direto com a Kellin";
     dica.classList.add("pronta");
 
+    rastrear("BotaoLiberado");
+
     if (navigator.vibrate) { try { navigator.vibrate(18); } catch (e) {} }
   }
 
@@ -727,8 +811,10 @@ img, video { -webkit-user-drag:none; user-drag:none; }
   });
 
   // Enquanto travado, o clique não leva a lugar nenhum.
+  // Liberado, conta o clique antes de abrir a conversa.
   zap.addEventListener("click", function (e) {
-    if (!livre) { e.preventDefault(); sacudir(); }
+    if (!livre) { e.preventDefault(); sacudir(); return; }
+    rastrear("CliqueWhatsApp", "Contact");
   });
   zap.addEventListener("keydown", function (e) {
     if (e.key !== "Enter" && e.key !== " ") return;
